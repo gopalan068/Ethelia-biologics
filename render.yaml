@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: ethelia-biologics
+    env: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: ./dist

@@ -15,6 +15,7 @@ const COLORS = {
   bg: '#f4f7fb',
 };
 
+
 const DNA_BASES = 'ATCGATCGTAGCTAGCATCGATCGATCGATCGTAGCTAGCATCGATCGAATTCCGGTTAA';
 
 const GENE_TOOLTIPS = [
@@ -497,14 +498,15 @@ function Navigation() {
   );
 }
 
-// ═══════════════════════════════════════
-// DNA HELIX (Three.js)
-// ═══════════════════════════════════════
+// ═══════════════════════════════════════════════════════
+// MODERN INTERACTIVE DNA HELIX — Drop-in replacement
+// Features: mouse drag rotation, scroll zoom, smooth inertia
+// Replace the old DNAHelix and GenomeTicker with this one
+// ═══════════════════════════════════════════════════════
+
 function DNAHelix() {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
-  const mouseRef = useMousePosition();
-  const sceneRef = useRef({});
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -514,160 +516,306 @@ function DNAHelix() {
     const width = container.clientWidth;
     const height = container.clientHeight;
 
-    // Scene setup
+    // ── Scene Setup ──
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(55, width / height, 0.1, 1000);
-    camera.position.set(0, 0, 18);
+    const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 1000);
+    camera.position.set(0, 0, 26);
+    camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.4;
+    renderer.shadowMap.enabled = false;
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
-    scene.add(ambientLight);
+    // ── Lighting ──
+    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
-    dirLight.position.set(5, 10, 7);
-    scene.add(dirLight);
+    const keyLight = new THREE.DirectionalLight(0xc8deff, 1.8);
+    keyLight.position.set(8, 12, 10);
+    scene.add(keyLight);
 
-    const pointLight = new THREE.PointLight(0x88a3c8, 0.5, 50);
-    pointLight.position.set(-5, 5, 10);
-    scene.add(pointLight);
+    const fillLight = new THREE.DirectionalLight(0x00ffb3, 0.6);
+    fillLight.position.set(-10, -6, 8);
+    scene.add(fillLight);
 
-    // Build DNA Helix
-    const helixGroup = new THREE.Group();
-    const numPoints = 300;
-    const radius = 2.8;
-    const totalHeight = 24;
-    const turns = 5;
+    const backLight = new THREE.DirectionalLight(0x7b61ff, 0.5);
+    backLight.position.set(0, -10, -8);
+    scene.add(backLight);
 
-    const strand1Pts = [];
-    const strand2Pts = [];
+    const pointA = new THREE.PointLight(0x00d4ff, 2.5, 35);
+    pointA.position.set(5, 10, 5);
+    scene.add(pointA);
 
-    for (let i = 0; i < numPoints; i++) {
-      const t = i / (numPoints - 1);
-      const angle = t * Math.PI * 2 * turns;
-      const y = (t - 0.5) * totalHeight;
+    const pointB = new THREE.PointLight(0x00ffb3, 1.8, 30);
+    pointB.position.set(-5, -10, 5);
+    scene.add(pointB);
 
-      strand1Pts.push(new THREE.Vector3(
-        Math.cos(angle) * radius, y, Math.sin(angle) * radius
-      ));
-      strand2Pts.push(new THREE.Vector3(
-        Math.cos(angle + Math.PI) * radius, y, Math.sin(angle + Math.PI) * radius
-      ));
+    // ── DNA Parameters ──
+    const NUM_PTS = 500;
+    const RADIUS = 3.0;
+    const HEIGHT = 26;
+    const TURNS = 5;
+    const RUNG_STEP = 12; // every Nth point gets a rung
+
+    // ── Build strand points ──
+    const s1 = [], s2 = [];
+    for (let i = 0; i < NUM_PTS; i++) {
+      const t = i / (NUM_PTS - 1);
+      const angle = t * Math.PI * 2 * TURNS;
+      const y = (t - 0.5) * HEIGHT;
+      s1.push(new THREE.Vector3(Math.cos(angle) * RADIUS, y, Math.sin(angle) * RADIUS));
+      s2.push(new THREE.Vector3(Math.cos(angle + Math.PI) * RADIUS, y, Math.sin(angle + Math.PI) * RADIUS));
     }
 
-    // Backbone tubes
-    const curve1 = new THREE.CatmullRomCurve3(strand1Pts);
-    const curve2 = new THREE.CatmullRomCurve3(strand2Pts);
+    const helixGroup = new THREE.Group();
 
-    const tubeMat1 = new THREE.MeshPhongMaterial({
-      color: 0x88a3c8,
-      shininess: 100,
+    // ── Strand material factory ──
+    const mkStrand = (hex, emHex) => new THREE.MeshPhysicalMaterial({
+      color: hex,
+      metalness: 0.0,
+      roughness: 0.05,
+      transmission: 0.55,      // glass-like
+      thickness: 0.8,
+      ior: 1.5,
       transparent: true,
-      opacity: 0.85,
-      emissive: 0x88a3c8,
-      emissiveIntensity: 0.1,
-    });
-    const tubeMat2 = new THREE.MeshPhongMaterial({
-      color: 0x41ed28,
-      shininess: 100,
-      transparent: true,
-      opacity: 0.85,
-      emissive: 0x41ed28,
-      emissiveIntensity: 0.08,
+      opacity: 0.88,
+      emissive: emHex,
+      emissiveIntensity: 0.35,
+      envMapIntensity: 1.0,
     });
 
-    const tube1 = new THREE.Mesh(new THREE.TubeGeometry(curve1, 256, 0.12, 8, false), tubeMat1);
-    const tube2 = new THREE.Mesh(new THREE.TubeGeometry(curve2, 256, 0.12, 8, false), tubeMat2);
+    const matBlue = mkStrand(0x00d4ff, 0x0055aa);
+    const matGreen = mkStrand(0x00ffb3, 0x005544);
+
+    // ── Backbone tubes ──
+    const tube1 = new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(s1), 400, 0.14, 14, false),
+      matBlue
+    );
+    const tube2 = new THREE.Mesh(
+      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(s2), 400, 0.14, 14, false),
+      matGreen
+    );
     helixGroup.add(tube1, tube2);
 
-    // Base pairs
-    const basePairInterval = 12;
-    const sphereGeo = new THREE.SphereGeometry(0.2, 8, 6);
-    const cylGeo = new THREE.CylinderGeometry(0.04, 0.04, 1, 6);
+    // ── Nucleotide spheres + rungs ──
+    const nodeGeoB = new THREE.SphereGeometry(0.20, 20, 14);
+    const nodeGeoG = new THREE.SphereGeometry(0.20, 20, 14);
 
-    for (let i = 0; i < numPoints; i += basePairInterval) {
-      const p1 = strand1Pts[i];
-      const p2 = strand2Pts[i];
+    const matNodeBlue = new THREE.MeshPhysicalMaterial({
+      color: 0x55eeff, emissive: 0x00aadd, emissiveIntensity: 0.6,
+      metalness: 0.1, roughness: 0.0, transmission: 0.3, thickness: 0.5,
+    });
+    const matNodeGreen = new THREE.MeshPhysicalMaterial({
+      color: 0x55ffcc, emissive: 0x00ddaa, emissiveIntensity: 0.5,
+      metalness: 0.1, roughness: 0.0, transmission: 0.3, thickness: 0.5,
+    });
+    const matRungInner = new THREE.MeshPhysicalMaterial({
+      color: 0xffffff, emissive: 0xaaddff, emissiveIntensity: 0.2,
+      metalness: 0.0, roughness: 0.1, transparent: true, opacity: 0.25,
+    });
 
+    for (let i = 0; i < NUM_PTS; i += RUNG_STEP) {
+      const p1 = s1[i];
+      const p2 = s2[i];
+      const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
       const dir = new THREE.Vector3().subVectors(p2, p1);
       const len = dir.length();
-      const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+      const norm = dir.clone().normalize();
+      const up = new THREE.Vector3(0, 1, 0);
 
-      // Cylinder rung
-      const cyl = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.035, 0.035, len, 6),
-        new THREE.MeshPhongMaterial({
-          color: i % 24 === 0 ? 0x88a3c8 : 0x41ed28,
-          transparent: true,
-          opacity: 0.35,
+      // Blue node
+      const nb = new THREE.Mesh(nodeGeoB, matNodeBlue);
+      nb.position.copy(p1);
+      helixGroup.add(nb);
+
+      // Green node
+      const ng = new THREE.Mesh(nodeGeoG, matNodeGreen);
+      ng.position.copy(p2);
+      helixGroup.add(ng);
+
+      // Rung rod — two halves colored
+      const halfLen = len / 2;
+      const q1 = new THREE.Vector3().lerpVectors(p1, mid, 0.5);
+      const q2 = new THREE.Vector3().lerpVectors(mid, p2, 0.5);
+
+      const cylGeo = new THREE.CylinderGeometry(0.045, 0.045, halfLen, 8);
+
+      const rBlue = new THREE.Mesh(cylGeo, new THREE.MeshPhysicalMaterial({
+        color: 0x00d4ff, emissive: 0x003366, emissiveIntensity: 0.3,
+        transparent: true, opacity: 0.55, roughness: 0.2,
+      }));
+      rBlue.position.copy(q1);
+      rBlue.quaternion.setFromUnitVectors(up, norm);
+      helixGroup.add(rBlue);
+
+      const rGreen = new THREE.Mesh(cylGeo, new THREE.MeshPhysicalMaterial({
+        color: 0x00ffb3, emissive: 0x003322, emissiveIntensity: 0.3,
+        transparent: true, opacity: 0.55, roughness: 0.2,
+      }));
+      rGreen.position.copy(q2);
+      rGreen.quaternion.setFromUnitVectors(up, norm);
+      helixGroup.add(rGreen);
+
+      // Center junction — glowing pearl
+      const jct = new THREE.Mesh(
+        new THREE.SphereGeometry(0.075, 10, 8),
+        new THREE.MeshPhysicalMaterial({
+          color: 0xffffff, emissive: 0xaaffee, emissiveIntensity: 0.9,
+          transparent: true, opacity: 0.7, roughness: 0.0,
         })
       );
-      cyl.position.copy(mid);
-      cyl.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
-      helixGroup.add(cyl);
-
-      // Nucleotide spheres
-      const s1 = new THREE.Mesh(sphereGeo, tubeMat1.clone());
-      s1.position.copy(p1);
-      s1.scale.setScalar(0.8);
-      helixGroup.add(s1);
-
-      const s2 = new THREE.Mesh(sphereGeo, tubeMat2.clone());
-      s2.position.copy(p2);
-      s2.scale.setScalar(0.8);
-      helixGroup.add(s2);
+      jct.position.copy(mid);
+      helixGroup.add(jct);
     }
 
-    // Glowing particles along helix
-    const particleCount = 60;
-    const particleGeo = new THREE.BufferGeometry();
-    const particlePositions = new Float32Array(particleCount * 3);
-    for (let i = 0; i < particleCount; i++) {
-      const t = Math.random();
-      const angle = t * Math.PI * 2 * turns;
-      const y = (t - 0.5) * totalHeight;
-      const r = radius + (Math.random() - 0.5) * 1.5;
-      particlePositions[i * 3] = Math.cos(angle) * r;
-      particlePositions[i * 3 + 1] = y;
-      particlePositions[i * 3 + 2] = Math.sin(angle) * r;
-    }
-    particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
-    const particleMat = new THREE.PointsMaterial({
-      color: 0x41ed28,
-      size: 0.12,
-      transparent: true,
-      opacity: 0.5,
-      blending: THREE.AdditiveBlending,
-    });
-    helixGroup.add(new THREE.Points(particleGeo, particleMat));
+    // ── Floating particles ──
+    const PCNT = 260;
+    const mkParticles = (offsetAngle, color) => {
+      const pos = new Float32Array(PCNT * 3);
+      for (let i = 0; i < PCNT; i++) {
+        const t = Math.random();
+        const angle = t * Math.PI * 2 * TURNS + offsetAngle + (Math.random() - 0.5) * 1.8;
+        const y = (t - 0.5) * HEIGHT;
+        const r = RADIUS + (Math.random() - 0.5) * 3.5;
+        pos[i * 3] = Math.cos(angle) * r;
+        pos[i * 3 + 1] = y;
+        pos[i * 3 + 2] = Math.sin(angle) * r;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      return new THREE.Points(geo, new THREE.PointsMaterial({
+        color, size: 0.065, transparent: true, opacity: 0.55,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      }));
+    };
+
+    const pBlue = mkParticles(0, 0x00d4ff);
+    const pGreen = mkParticles(Math.PI, 0x00ffb3);
+    helixGroup.add(pBlue, pGreen);
 
     scene.add(helixGroup);
-    sceneRef.current = { scene, camera, renderer, helixGroup };
 
-    // Animation loop
+    // ── Interaction State ──
+    const state = {
+      isDragging: false,
+      prevX: 0, prevY: 0,
+      velX: 0, velY: 0,
+      rotX: 0.08, rotY: 0,
+      zoom: 26,
+    };
+
+    const onPointerDown = (e) => {
+      state.isDragging = true;
+      state.prevX = e.clientX;
+      state.prevY = e.clientY;
+      state.velX = 0;
+      state.velY = 0;
+      canvas.style.cursor = 'grabbing';
+    };
+
+    const onPointerMove = (e) => {
+      if (!state.isDragging) return;
+      const dx = e.clientX - state.prevX;
+      const dy = e.clientY - state.prevY;
+      state.velX = dx * 0.012;
+      state.velY = dy * 0.010;
+      state.rotY += state.velX;
+      state.rotX += state.velY;
+      state.rotX = Math.max(-1.2, Math.min(1.2, state.rotX));
+      state.prevX = e.clientX;
+      state.prevY = e.clientY;
+    };
+
+    const onPointerUp = () => {
+      state.isDragging = false;
+      canvas.style.cursor = 'grab';
+    };
+
+    const onWheel = (e) => {
+      state.zoom += e.deltaY * 0.03;
+      state.zoom = Math.max(12, Math.min(40, state.zoom));
+    };
+
+    canvas.style.cursor = 'grab';
+    canvas.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('wheel', onWheel, { passive: true });
+
+    // ── Touch support ──
+    let lastTouchX = 0, lastTouchY = 0;
+    const onTouchStart = (e) => {
+      lastTouchX = e.touches[0].clientX;
+      lastTouchY = e.touches[0].clientY;
+    };
+    const onTouchMove = (e) => {
+      const dx = e.touches[0].clientX - lastTouchX;
+      const dy = e.touches[0].clientY - lastTouchY;
+      state.rotY += dx * 0.012;
+      state.rotX += dy * 0.010;
+      state.rotX = Math.max(-1.2, Math.min(1.2, state.rotX));
+      lastTouchX = e.touches[0].clientX;
+      lastTouchY = e.touches[0].clientY;
+    };
+    canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+    canvas.addEventListener('touchmove', onTouchMove, { passive: true });
+
+    // ── Animation ──
     let frameId;
+    const clock = new THREE.Clock();
+    const autoRotSpeed = 0.004;
+
+    const animateParticles = (geo, dt) => {
+      const pos = geo.attributes.position.array;
+      for (let i = 0; i < PCNT; i++) {
+        pos[i * 3 + 1] += dt * 0.9;
+        if (pos[i * 3 + 1] > HEIGHT / 2) pos[i * 3 + 1] = -HEIGHT / 2;
+      }
+      geo.attributes.position.needsUpdate = true;
+    };
+
     const animate = () => {
       frameId = requestAnimationFrame(animate);
+      const dt = clock.getDelta();
+      const elapsed = clock.getElapsedTime();
 
-      // Slow rotation
-      helixGroup.rotation.y += 0.003;
+      // Auto-rotate when not dragging, apply inertia when released
+      if (!state.isDragging) {
+        state.rotY += autoRotSpeed;
+        state.velX *= 0.92;
+        state.velY *= 0.92;
+        state.rotY += state.velX;
+        state.rotX += state.velY;
+      }
 
-      // Mouse parallax
-      const mx = (mouseRef.current.x / window.innerWidth - 0.5) * 2;
-      const my = (mouseRef.current.y / window.innerHeight - 0.5) * 2;
-      camera.position.x += (mx * 2 - camera.position.x) * 0.02;
-      camera.position.y += (-my * 1.5 - camera.position.y) * 0.02;
-      camera.lookAt(0, 0, 0);
+      helixGroup.rotation.y = state.rotY;
+      helixGroup.rotation.x = state.rotX;
+
+      // Smooth zoom
+      camera.position.z += (state.zoom - camera.position.z) * 0.08;
+
+      // Subtle breathe
+      const breathe = 1 + Math.sin(elapsed * 0.7) * 0.012;
+      helixGroup.scale.setScalar(breathe);
+
+      // Orbit point lights for shimmer
+      pointA.position.x = Math.cos(elapsed * 0.4) * 10;
+      pointA.position.z = Math.sin(elapsed * 0.4) * 8;
+      pointB.position.x = Math.sin(elapsed * 0.3) * 9;
+      pointB.position.z = Math.cos(elapsed * 0.3) * 7;
+
+      animateParticles(pBlue.geometry, dt);
+      animateParticles(pGreen.geometry, dt);
 
       renderer.render(scene, camera);
     };
     animate();
 
-    // Resize handler
+    // ── Resize ──
     const onResize = () => {
       const w = container.clientWidth;
       const h = container.clientHeight;
@@ -680,11 +828,17 @@ function DNAHelix() {
     return () => {
       cancelAnimationFrame(frameId);
       window.removeEventListener('resize', onResize);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('wheel', onWheel);
+      canvas.removeEventListener('touchstart', onTouchStart);
+      canvas.removeEventListener('touchmove', onTouchMove);
       renderer.dispose();
       scene.traverse((obj) => {
         if (obj.geometry) obj.geometry.dispose();
         if (obj.material) {
-          if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+          if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
           else obj.material.dispose();
         }
       });
@@ -697,61 +851,6 @@ function DNAHelix() {
     </div>
   );
 }
-
-// ═══════════════════════════════════════
-// GENOME TICKER
-// ═══════════════════════════════════════
-function GenomeTicker() {
-  const [highlights, setHighlights] = useState({});
-  const sequenceRef = useRef(null);
-
-  // Generate a long DNA sequence
-  const sequence = useMemo(() => {
-    let s = '';
-    const bases = 'ATCG';
-    for (let i = 0; i < 300; i++) {
-      s += bases[Math.floor(Math.random() * 4)];
-    }
-    return s + s; // Duplicate for seamless scroll
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const idx = Math.floor(Math.random() * 300);
-      const tooltip = GENE_TOOLTIPS[Math.floor(Math.random() * GENE_TOOLTIPS.length)];
-      setHighlights((prev) => ({ ...prev, [idx]: tooltip }));
-
-      setTimeout(() => {
-        setHighlights((prev) => {
-          const next = { ...prev };
-          delete next[idx];
-          return next;
-        });
-      }, 2500);
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <div className="genome-ticker-wrap">
-      <div className="genome-ticker" ref={sequenceRef}>
-        {sequence.split('').map((base, i) => (
-          <span
-            key={i}
-            className={`base ${highlights[i % 300] ? 'highlighted' : ''}`}
-          >
-            {base}
-            {highlights[i % 300] && i < 300 && (
-              <span className="base-tooltip show">{highlights[i % 300]}</span>
-            )}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ═══════════════════════════════════════
 // HERO SECTION
 // ═══════════════════════════════════════
@@ -837,8 +936,6 @@ function HeroSection() {
 
         <DNAHelix />
       </div>
-
-      <GenomeTicker />
     </section>
   );
 }
