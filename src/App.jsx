@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import * as THREE from 'three';
 import './index.css';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
 /* ============================================================
    ETHELIA BIOLOGICS — "The Living Blueprint"
@@ -497,26 +500,9 @@ function Navigation() {
     </nav>
   );
 }
-// ═══════════════════════════════════════════════════════
-// DNA HELIX — Calibrated to reference image
-// Wide glossy ribbon backbones · Colored base-pair rods · White nodes
-// Horizontal-only drag rotation · Scroll to zoom
-// ═══════════════════════════════════════════════════════
-//
-// ── CHANGE GUIDE ────────────────────────────────────────
-// 1. HORIZONTAL-ONLY ROTATION: vertical mouse/touch drag is ignored.
-//    rotX is permanently locked at 0. Search "LOCK" to find it.
-//
-// 2. VERTICAL STRETCH: controlled by the HEIGHT constant below (~line 60).
-//    Current value = 56 (2× original 28). Raise to stretch, lower to compress.
-//    Also adjust targetZoom (line ~210) if the model clips out of frame.
-//
-// 3. GLOSSY BACKBONE: ribbon uses MeshPhysicalMaterial.
-//    Search "GLOSSY" to find it. Tune:
-//      roughness (0 = mirror, 1 = matte)
-//      clearcoat (0–1, lacquer layer strength)
-// ────────────────────────────────────────────────────────
-
+//----------------------------------------------
+//DNA HELIX STRUCTURE
+//----------------------------------------------
 function DNAHelix() {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
@@ -528,308 +514,225 @@ function DNAHelix() {
 
     const width = container.clientWidth;
     const height = container.clientHeight;
+    const COUNT = 12000;
 
     // ── Scene ──
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(36, width / height, 0.1, 1000);
-    camera.position.set(0, 0, 42);
-    camera.lookAt(0, 0, 0);
+    const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 2000);
+    camera.position.set(0, 0, 80);
 
-    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setClearColor(0x000000, 0);
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setClearColor(0x000000, 0);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.1;
+    renderer.toneMappingExposure = 1.2;
 
-    // ── Lighting — soft studio ──
-    scene.add(new THREE.AmbientLight(0xffffff, 0.85));
+    // ── Particles ──
+    const geometry = new THREE.TetrahedronGeometry(0.22);
+    const material = new THREE.MeshBasicMaterial({ vertexColors: true });
+    const mesh = new THREE.InstancedMesh(geometry, material, COUNT);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    scene.add(mesh);
 
-    const key = new THREE.DirectionalLight(0xffffff, 1.4);
-    key.position.set(6, 14, 12);
-    scene.add(key);
+    const positions = Array.from({ length: COUNT }, () =>
+      new THREE.Vector3(
+        (Math.random() - 0.5) * 80,
+        (Math.random() - 0.5) * 80,
+        (Math.random() - 0.5) * 80
+      )
+    );
 
-    const fill = new THREE.DirectionalLight(0xd0e8ff, 0.6);
-    fill.position.set(-10, -4, 8);
-    scene.add(fill);
+    const dummy = new THREE.Object3D();
+    const pColor = new THREE.Color();
+    const target = new THREE.Vector3();
 
-    const back = new THREE.DirectionalLight(0xffffff, 0.35);
-    back.position.set(0, -12, -8);
-    scene.add(back);
-
-    const rimL = new THREE.PointLight(0xc8d8ff, 1.4, 80);
-    rimL.position.set(-8, 6, -4);
-    scene.add(rimL);
-
-    const rimR = new THREE.PointLight(0xffeedd, 1.0, 80);
-    rimR.position.set(8, -4, -4);
-    scene.add(rimR);
-
-    // ── DNA Parameters ──
-    const NUM_PTS = 600;
-    const RADIUS = 2.8;
-
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // CHANGE 2 — VERTICAL STRETCH
-    // Edit HEIGHT to scale the model vertically.
-    //   28  = original length
-    //   56  = 2× stretch  (current)
-    //   84  = 3× stretch
-    // Also update targetZoom below if clipping.
-    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    const HEIGHT = 56;
-
-    const TURNS = 5.2;
-    const RUNG_STEP = 14;
-
-    const BASE_COLORS = [
-      [0x4a90d9, 0xe8a857],
-      [0x44c4a1, 0xe07060],
-      [0x7b7fd4, 0xf0c060],
-      [0x55aacc, 0xd4885a],
-    ];
-
-    // ── Strand points ──
-    const s1 = [], s2 = [];
-    for (let i = 0; i < NUM_PTS; i++) {
-      const t = i / (NUM_PTS - 1);
-      const angle = t * Math.PI * 2 * TURNS;
-      const y = (t - 0.5) * HEIGHT;
-      s1.push(new THREE.Vector3(Math.cos(angle) * RADIUS, y, Math.sin(angle) * RADIUS));
-      s2.push(new THREE.Vector3(Math.cos(angle + Math.PI) * RADIUS, y, Math.sin(angle + Math.PI) * RADIUS));
-    }
-
-    const helixGroup = new THREE.Group();
-
-    // ── Backbone: wide flat ribbons ──
-    const buildRibbon = (pts, color) => {
-      const curve = new THREE.CatmullRomCurve3(pts);
-      const segments = 500;
-      const frames = curve.computeFrenetFrames(segments, false);
-      const positions = [], normals = [], indices = [], uvs = [];
-      const ribbonW = 0.52;
-      const ribbonT = 0.13;
-
-      for (let i = 0; i <= segments; i++) {
-        const pt = curve.getPoint(i / segments);
-        const N = frames.normals[i];
-        const B = frames.binormals[i];
-
-        const tl = pt.clone().addScaledVector(B, -ribbonW).addScaledVector(N, ribbonT);
-        const tr = pt.clone().addScaledVector(B, ribbonW).addScaledVector(N, ribbonT);
-        const bl = pt.clone().addScaledVector(B, -ribbonW).addScaledVector(N, -ribbonT);
-        const br = pt.clone().addScaledVector(B, ribbonW).addScaledVector(N, -ribbonT);
-
-        positions.push(tl.x, tl.y, tl.z, tr.x, tr.y, tr.z, bl.x, bl.y, bl.z, br.x, br.y, br.z);
-        normals.push(N.x, N.y, N.z, N.x, N.y, N.z, -N.x, -N.y, -N.z, -N.x, -N.y, -N.z);
-        const u = i / segments;
-        uvs.push(0, u, 1, u, 0, u, 1, u);
-      }
-
-      for (let i = 0; i < segments; i++) {
-        const b = i * 4;
-        indices.push(b, b + 1, b + 4, b + 1, b + 5, b + 4);
-        indices.push(b + 2, b + 6, b + 3, b + 3, b + 6, b + 7);
-        indices.push(b, b + 4, b + 2, b + 2, b + 4, b + 6);
-        indices.push(b + 1, b + 3, b + 5, b + 3, b + 7, b + 5);
-      }
-
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-      geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
-      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-      geo.setIndex(indices);
-      geo.computeVertexNormals();
-
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // CHANGE 3 — GLOSSY BACKBONE MATERIAL
-      // MeshPhysicalMaterial adds clearcoat (lacquer) layer.
-      // Tune these values:
-      //   roughness         0 = mirror-smooth, 1 = fully matte
-      //   clearcoat         0–1, strength of glossy top coat
-      //   clearcoatRoughness 0 = sharp reflections, 1 = blurry
-      //   reflectivity      0–1, how much environment it reflects
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      const mat = new THREE.MeshPhysicalMaterial({
-        color,
-        metalness: 0.10,
-        roughness: 0.02,
-        clearcoat: 1.0,
-        clearcoatRoughness: 0.05,
-        reflectivity: 1.0,
-        side: THREE.DoubleSide,
-      });
-
-      return new THREE.Mesh(geo, mat);
+    // Dark colors — readable on white
+    const PALETTE = {
+      strandA: new THREE.Color('#0044cc'),
+      strandB: new THREE.Color('#0099cc'),
+      bridgeActive: new THREE.Color('#111111'),
+      bridgeOff: new THREE.Color('#c8dde8'),
     };
 
-    const ribbon1 = buildRibbon(s1, 0xe8eaf0);
-    const ribbon2 = buildRibbon(s2, 0xe2e4ee);
-    helixGroup.add(ribbon1, ribbon2);
-
-    // ── Nodes + Base-pair rungs ──
-    const nodeGeo = new THREE.SphereGeometry(0.21, 22, 16);
-    const nodeMat = new THREE.MeshStandardMaterial({
-      color: 0xf5f6fa, metalness: 0.05, roughness: 0.18,
-    });
-
-    let colorIdx = 0;
-    for (let i = 0; i < NUM_PTS; i += RUNG_STEP) {
-      const p1 = s1[i];
-      const p2 = s2[i];
-      const dir = new THREE.Vector3().subVectors(p2, p1);
-      const len = dir.length();
-      const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
-      const norm = dir.clone().normalize();
-      const up = new THREE.Vector3(0, 1, 0);
-
-      const [col1, col2] = BASE_COLORS[colorIdx % BASE_COLORS.length];
-      colorIdx++;
-
-      const n1 = new THREE.Mesh(nodeGeo, nodeMat);
-      n1.position.copy(p1);
-      helixGroup.add(n1);
-
-      const n2 = new THREE.Mesh(nodeGeo, nodeMat);
-      n2.position.copy(p2);
-      helixGroup.add(n2);
-
-      const inset = 0.24;
-      const rodLen = (len - inset * 2) / 2;
-      const q1 = p1.clone().addScaledVector(norm, inset + rodLen / 2);
-      const q2 = p2.clone().addScaledVector(norm, -(inset + rodLen / 2));
-      const rodGeo = new THREE.CylinderGeometry(0.072, 0.072, rodLen, 14);
-
-      const rod1 = new THREE.Mesh(rodGeo, new THREE.MeshStandardMaterial({
-        color: col1, metalness: 0.1, roughness: 0.3,
-      }));
-      rod1.position.copy(q1);
-      rod1.quaternion.setFromUnitVectors(up, norm);
-      helixGroup.add(rod1);
-
-      const rod2 = new THREE.Mesh(rodGeo, new THREE.MeshStandardMaterial({
-        color: col2, metalness: 0.1, roughness: 0.3,
-      }));
-      rod2.position.copy(q2);
-      rod2.quaternion.setFromUnitVectors(up, norm);
-      helixGroup.add(rod2);
-
-      const pearl = new THREE.Mesh(
-        new THREE.SphereGeometry(0.10, 12, 8),
-        new THREE.MeshStandardMaterial({ color: 0xf0f2f8, roughness: 0.15 })
-      );
-      pearl.position.copy(mid);
-      helixGroup.add(pearl);
-    }
-
-    scene.add(helixGroup);
-
-    // ── Interaction state ──
+    // ── Interaction State ──
     const state = {
-      dragging: false,
-      prevX: 0,
-      velX: 0,
-      rotY: 0,
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // CHANGE 2 — also update targetZoom if model clips
-      //   42 frames a HEIGHT=56 model well.
-      //   If you increase HEIGHT further, raise this too.
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      targetZoom: 42,
+      isDragging: false,
+      prevX: 0, prevY: 0,
+      velX: 0, velY: 0,
+      rotX: 0.08, rotY: 0,
+      zoom: 80,
+    };
+
+    const onPointerDown = (e) => {
+      state.isDragging = true;
+      state.prevX = e.clientX;
+      state.prevY = e.clientY;
+      state.velX = 0;
+      state.velY = 0;
+      canvas.style.cursor = 'grabbing';
+    };
+    const onPointerMove = (e) => {
+      if (!state.isDragging) return;
+      const dx = e.clientX - state.prevX;
+      const dy = e.clientY - state.prevY;
+      state.velX = dx * 0.012;
+      state.velY = dy * 0.010;
+      state.rotY += state.velX;
+      state.rotX += state.velY;
+      state.rotX = Math.max(-1.2, Math.min(1.2, state.rotX));
+      state.prevX = e.clientX;
+      state.prevY = e.clientY;
+    };
+    const onPointerUp = () => {
+      state.isDragging = false;
+      canvas.style.cursor = 'grab';
+    };
+    const onWheel = (e) => {
+      state.zoom += e.deltaY * 0.05;
+      state.zoom = Math.max(30, Math.min(150, state.zoom));
     };
 
     canvas.style.cursor = 'grab';
-
-    const onDown = (e) => {
-      state.dragging = true;
-      state.prevX = e.clientX;
-      state.velX = 0;
-      canvas.style.cursor = 'grabbing';
-    };
-
-    const onMove = (e) => {
-      if (!state.dragging) return;
-      const dx = e.clientX - state.prevX;
-      state.velX = dx * 0.011;
-      state.rotY += state.velX;
-      state.prevX = e.clientX;
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      // CHANGE 1 — HORIZONTAL-ONLY ROTATION
-      // dy is intentionally unused here.
-      // rotX is never modified — it stays at 0.
-      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    };
-
-    const onUp = () => { state.dragging = false; canvas.style.cursor = 'grab'; };
-    const onWheel = (e) => {
-      state.targetZoom = Math.max(16, Math.min(55, state.targetZoom + e.deltaY * 0.04));
-    };
-
-    canvas.addEventListener('pointerdown', onDown);
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
+    canvas.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
     canvas.addEventListener('wheel', onWheel, { passive: true });
 
-    // Touch — horizontal only
-    let lx = 0;
-    canvas.addEventListener('touchstart', (e) => { lx = e.touches[0].clientX; }, { passive: true });
-    canvas.addEventListener('touchmove', (e) => {
-      const dx = e.touches[0].clientX - lx;
-      state.rotY += dx * 0.011;
-      lx = e.touches[0].clientX;
-    }, { passive: true });
+    // Touch
+    let lastTouchX = 0, lastTouchY = 0;
+    const onTouchStart = (e) => {
+      lastTouchX = e.touches[0].clientX;
+      lastTouchY = e.touches[0].clientY;
+    };
+    const onTouchMove = (e) => {
+      const dx = e.touches[0].clientX - lastTouchX;
+      const dy = e.touches[0].clientY - lastTouchY;
+      state.rotY += dx * 0.012;
+      state.rotX += dy * 0.010;
+      state.rotX = Math.max(-1.2, Math.min(1.2, state.rotX));
+      lastTouchX = e.touches[0].clientX;
+      lastTouchY = e.touches[0].clientY;
+    };
+    canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+    canvas.addEventListener('touchmove', onTouchMove, { passive: true });
 
-    // ── Animate ──
+    // ── Animation ──
     let frameId;
     const clock = new THREE.Clock();
 
     const animate = () => {
       frameId = requestAnimationFrame(animate);
-      const elapsed = clock.getElapsedTime();
+      const time = clock.getElapsedTime();
 
-      if (!state.dragging) {
-        state.rotY += 0.0035;
-        state.velX *= 0.90;
+      // Auto-rotate + inertia
+      if (!state.isDragging) {
+        state.rotY += 0.004;
+        state.velX *= 0.92;
+        state.velY *= 0.92;
         state.rotY += state.velX;
+        state.rotX += state.velY;
       }
 
-      helixGroup.rotation.y = state.rotY;
-      helixGroup.rotation.x = 0;   // CHANGE 1 — always locked to 0
+      // Smooth zoom
+      camera.position.z += (state.zoom - camera.position.z) * 0.08;
+      camera.lookAt(0, 0, 0);
 
-      camera.position.z += (state.targetZoom - camera.position.z) * 0.07;
+      // DNA swarm logic
+      const twist = 1.5, radius = 16, flux = 1.4, zoom = 1.4;
+      const t = time * 0.4 * flux;
+      const breakY = Math.sin(t * 0.4) * 50;
 
-      rimL.position.x = Math.cos(elapsed * 0.25) * 10;
-      rimL.position.z = Math.sin(elapsed * 0.25) * 8;
-      rimR.position.x = Math.sin(elapsed * 0.2) * 10;
-      rimR.position.z = Math.cos(elapsed * 0.2) * 7;
+      // Apply rotation via a pivot group offset
+      const cosY = Math.cos(state.rotY), sinY = Math.sin(state.rotY);
+      const cosX = Math.cos(state.rotX), sinX = Math.sin(state.rotX);
 
+      for (let i = 0; i < COUNT; i++) {
+        const norm = i / COUNT;
+        let px = 0, py = 0, pz = 0;
+        const isBackbone = norm < 0.75;
+
+        if (isBackbone) {
+          const side = norm < 0.375 ? 1 : -1;
+          const n2 = norm < 0.375 ? norm / 0.375 : (norm - 0.375) / 0.375;
+          const v = (n2 - 0.5) * 80;
+          const angle = v * 0.1 * twist + t;
+          const offset = side === 1 ? 0 : Math.PI;
+          const dy = v - breakY;
+          const factor = Math.min(1.0, (dy * dy) / 200.0);
+          const currentR = radius * (0.95 + 0.05 * factor);
+          px = Math.cos(angle + offset) * currentR;
+          pz = Math.sin(angle + offset) * currentR;
+          py = v;
+          const jitter = (1.0 - factor) * 3.0;
+          px += Math.sin(i * 0.5 + t * 8) * jitter;
+          pz += Math.cos(i * 0.5 + t * 8) * jitter;
+          pColor.lerpColors(PALETTE.strandA, PALETTE.strandB, factor);
+        } else {
+          const n2 = (norm - 0.75) / 0.25;
+          const v = (n2 - 0.5) * 80;
+          const angle = v * 0.1 * twist + t;
+          const lerpVal = Math.sin(i * 99.0) * 0.5 + 0.5;
+          const r = radius * (lerpVal * 2.0 - 1.0);
+          const dy = Math.abs(v - breakY);
+          px = Math.cos(angle) * r;
+          pz = Math.sin(angle) * r;
+          py = v;
+          if (dy < 12 && Math.sin(i * 1.5) > 0.4) {
+            px += Math.sin(i + t * 5) * 5;
+            pz += Math.cos(i + t * 5) * 5;
+            pColor.copy(PALETTE.bridgeActive);
+          } else {
+            pColor.copy(PALETTE.bridgeOff);
+          }
+        }
+
+        // Apply rotation manually so we can keep mesh world-space
+        const sx = px * zoom, sy = py * zoom, sz = pz * zoom;
+        // Y rotation
+        const rx1 = sx * cosY + sz * sinY;
+        const rz1 = -sx * sinY + sz * cosY;
+        // X rotation
+        const ry2 = sy * cosX - rz1 * sinX;
+        const rz2 = sy * sinX + rz1 * cosX;
+
+        target.set(rx1, ry2, rz2);
+        positions[i].lerp(target, 0.1);
+        dummy.position.copy(positions[i]);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(i, dummy.matrix);
+        mesh.setColorAt(i, pColor);
+      }
+
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       renderer.render(scene, camera);
     };
     animate();
 
+    // ── Resize ──
     const onResize = () => {
-      const w = container.clientWidth, h = container.clientHeight;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
     };
     window.addEventListener('resize', onResize);
 
+    // ── Cleanup ──
     return () => {
       cancelAnimationFrame(frameId);
       window.removeEventListener('resize', onResize);
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      canvas.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('wheel', onWheel);
+      canvas.removeEventListener('touchstart', onTouchStart);
+      canvas.removeEventListener('touchmove', onTouchMove);
       renderer.dispose();
-      scene.traverse((obj) => {
-        if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) {
-          if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
-          else obj.material.dispose();
-        }
-      });
+      geometry.dispose();
+      material.dispose();
     };
   }, []);
 
@@ -839,6 +742,7 @@ function DNAHelix() {
     </div>
   );
 }
+
 // ═══════════════════════════════════════
 // HERO SECTION
 // ═══════════════════════════════════════
@@ -949,7 +853,8 @@ function ProteinGlobe() {
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.1, 1000);
     camera.position.z = 8;
 
-    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setClearColor(0x000000, 0);
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
