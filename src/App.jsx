@@ -497,12 +497,25 @@ function Navigation() {
     </nav>
   );
 }
-
 // ═══════════════════════════════════════════════════════
-// MODERN INTERACTIVE DNA HELIX — Drop-in replacement
-// Features: mouse drag rotation, scroll zoom, smooth inertia
-// Replace the old DNAHelix and GenomeTicker with this one
+// DNA HELIX — Calibrated to reference image
+// Wide glossy ribbon backbones · Colored base-pair rods · White nodes
+// Horizontal-only drag rotation · Scroll to zoom
 // ═══════════════════════════════════════════════════════
+//
+// ── CHANGE GUIDE ────────────────────────────────────────
+// 1. HORIZONTAL-ONLY ROTATION: vertical mouse/touch drag is ignored.
+//    rotX is permanently locked at 0. Search "LOCK" to find it.
+//
+// 2. VERTICAL STRETCH: controlled by the HEIGHT constant below (~line 60).
+//    Current value = 56 (2× original 28). Raise to stretch, lower to compress.
+//    Also adjust targetZoom (line ~210) if the model clips out of frame.
+//
+// 3. GLOSSY BACKBONE: ribbon uses MeshPhysicalMaterial.
+//    Search "GLOSSY" to find it. Tune:
+//      roughness (0 = mirror, 1 = matte)
+//      clearcoat (0–1, lacquer layer strength)
+// ────────────────────────────────────────────────────────
 
 function DNAHelix() {
   const canvasRef = useRef(null);
@@ -516,10 +529,10 @@ function DNAHelix() {
     const width = container.clientWidth;
     const height = container.clientHeight;
 
-    // ── Scene Setup ──
+    // ── Scene ──
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 1000);
-    camera.position.set(0, 0, 26);
+    const camera = new THREE.PerspectiveCamera(36, width / height, 0.1, 1000);
+    camera.position.set(0, 0, 42);
     camera.lookAt(0, 0, 0);
 
     const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
@@ -527,40 +540,56 @@ function DNAHelix() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setClearColor(0x000000, 0);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.4;
-    renderer.shadowMap.enabled = false;
+    renderer.toneMappingExposure = 1.1;
 
-    // ── Lighting ──
-    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+    // ── Lighting — soft studio ──
+    scene.add(new THREE.AmbientLight(0xffffff, 0.85));
 
-    const keyLight = new THREE.DirectionalLight(0xc8deff, 1.8);
-    keyLight.position.set(8, 12, 10);
-    scene.add(keyLight);
+    const key = new THREE.DirectionalLight(0xffffff, 1.4);
+    key.position.set(6, 14, 12);
+    scene.add(key);
 
-    const fillLight = new THREE.DirectionalLight(0x00ffb3, 0.6);
-    fillLight.position.set(-10, -6, 8);
-    scene.add(fillLight);
+    const fill = new THREE.DirectionalLight(0xd0e8ff, 0.6);
+    fill.position.set(-10, -4, 8);
+    scene.add(fill);
 
-    const backLight = new THREE.DirectionalLight(0x7b61ff, 0.5);
-    backLight.position.set(0, -10, -8);
-    scene.add(backLight);
+    const back = new THREE.DirectionalLight(0xffffff, 0.35);
+    back.position.set(0, -12, -8);
+    scene.add(back);
 
-    const pointA = new THREE.PointLight(0x00d4ff, 2.5, 35);
-    pointA.position.set(5, 10, 5);
-    scene.add(pointA);
+    const rimL = new THREE.PointLight(0xc8d8ff, 1.4, 80);
+    rimL.position.set(-8, 6, -4);
+    scene.add(rimL);
 
-    const pointB = new THREE.PointLight(0x00ffb3, 1.8, 30);
-    pointB.position.set(-5, -10, 5);
-    scene.add(pointB);
+    const rimR = new THREE.PointLight(0xffeedd, 1.0, 80);
+    rimR.position.set(8, -4, -4);
+    scene.add(rimR);
 
     // ── DNA Parameters ──
-    const NUM_PTS = 500;
-    const RADIUS = 3.0;
-    const HEIGHT = 26;
-    const TURNS = 5;
-    const RUNG_STEP = 12; // every Nth point gets a rung
+    const NUM_PTS = 600;
+    const RADIUS = 2.8;
 
-    // ── Build strand points ──
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // CHANGE 2 — VERTICAL STRETCH
+    // Edit HEIGHT to scale the model vertically.
+    //   28  = original length
+    //   56  = 2× stretch  (current)
+    //   84  = 3× stretch
+    // Also update targetZoom below if clipping.
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    const HEIGHT = 56;
+
+    const TURNS = 5.2;
+    const RUNG_STEP = 14;
+
+    const BASE_COLORS = [
+      [0x4a90d9, 0xe8a857],
+      [0x44c4a1, 0xe07060],
+      [0x7b7fd4, 0xf0c060],
+      [0x55aacc, 0xd4885a],
+    ];
+
+    // ── Strand points ──
     const s1 = [], s2 = [];
     for (let i = 0; i < NUM_PTS; i++) {
       const t = i / (NUM_PTS - 1);
@@ -572,253 +601,214 @@ function DNAHelix() {
 
     const helixGroup = new THREE.Group();
 
-    // ── Strand material factory ──
-    const mkStrand = (hex, emHex) => new THREE.MeshPhysicalMaterial({
-      color: hex,
-      metalness: 0.0,
-      roughness: 0.05,
-      transmission: 0.55,      // glass-like
-      thickness: 0.8,
-      ior: 1.5,
-      transparent: true,
-      opacity: 0.88,
-      emissive: emHex,
-      emissiveIntensity: 0.35,
-      envMapIntensity: 1.0,
+    // ── Backbone: wide flat ribbons ──
+    const buildRibbon = (pts, color) => {
+      const curve = new THREE.CatmullRomCurve3(pts);
+      const segments = 500;
+      const frames = curve.computeFrenetFrames(segments, false);
+      const positions = [], normals = [], indices = [], uvs = [];
+      const ribbonW = 0.52;
+      const ribbonT = 0.13;
+
+      for (let i = 0; i <= segments; i++) {
+        const pt = curve.getPoint(i / segments);
+        const N = frames.normals[i];
+        const B = frames.binormals[i];
+
+        const tl = pt.clone().addScaledVector(B, -ribbonW).addScaledVector(N, ribbonT);
+        const tr = pt.clone().addScaledVector(B, ribbonW).addScaledVector(N, ribbonT);
+        const bl = pt.clone().addScaledVector(B, -ribbonW).addScaledVector(N, -ribbonT);
+        const br = pt.clone().addScaledVector(B, ribbonW).addScaledVector(N, -ribbonT);
+
+        positions.push(tl.x, tl.y, tl.z, tr.x, tr.y, tr.z, bl.x, bl.y, bl.z, br.x, br.y, br.z);
+        normals.push(N.x, N.y, N.z, N.x, N.y, N.z, -N.x, -N.y, -N.z, -N.x, -N.y, -N.z);
+        const u = i / segments;
+        uvs.push(0, u, 1, u, 0, u, 1, u);
+      }
+
+      for (let i = 0; i < segments; i++) {
+        const b = i * 4;
+        indices.push(b, b + 1, b + 4, b + 1, b + 5, b + 4);
+        indices.push(b + 2, b + 6, b + 3, b + 3, b + 6, b + 7);
+        indices.push(b, b + 4, b + 2, b + 2, b + 4, b + 6);
+        indices.push(b + 1, b + 3, b + 5, b + 3, b + 7, b + 5);
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // CHANGE 3 — GLOSSY BACKBONE MATERIAL
+      // MeshPhysicalMaterial adds clearcoat (lacquer) layer.
+      // Tune these values:
+      //   roughness         0 = mirror-smooth, 1 = fully matte
+      //   clearcoat         0–1, strength of glossy top coat
+      //   clearcoatRoughness 0 = sharp reflections, 1 = blurry
+      //   reflectivity      0–1, how much environment it reflects
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      const mat = new THREE.MeshPhysicalMaterial({
+        color,
+        metalness: 0.10,
+        roughness: 0.02,
+        clearcoat: 1.0,
+        clearcoatRoughness: 0.05,
+        reflectivity: 1.0,
+        side: THREE.DoubleSide,
+      });
+
+      return new THREE.Mesh(geo, mat);
+    };
+
+    const ribbon1 = buildRibbon(s1, 0xe8eaf0);
+    const ribbon2 = buildRibbon(s2, 0xe2e4ee);
+    helixGroup.add(ribbon1, ribbon2);
+
+    // ── Nodes + Base-pair rungs ──
+    const nodeGeo = new THREE.SphereGeometry(0.21, 22, 16);
+    const nodeMat = new THREE.MeshStandardMaterial({
+      color: 0xf5f6fa, metalness: 0.05, roughness: 0.18,
     });
 
-    const matBlue = mkStrand(0x00d4ff, 0x0055aa);
-    const matGreen = mkStrand(0x00ffb3, 0x005544);
-
-    // ── Backbone tubes ──
-    const tube1 = new THREE.Mesh(
-      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(s1), 400, 0.14, 14, false),
-      matBlue
-    );
-    const tube2 = new THREE.Mesh(
-      new THREE.TubeGeometry(new THREE.CatmullRomCurve3(s2), 400, 0.14, 14, false),
-      matGreen
-    );
-    helixGroup.add(tube1, tube2);
-
-    // ── Nucleotide spheres + rungs ──
-    const nodeGeoB = new THREE.SphereGeometry(0.20, 20, 14);
-    const nodeGeoG = new THREE.SphereGeometry(0.20, 20, 14);
-
-    const matNodeBlue = new THREE.MeshPhysicalMaterial({
-      color: 0x55eeff, emissive: 0x00aadd, emissiveIntensity: 0.6,
-      metalness: 0.1, roughness: 0.0, transmission: 0.3, thickness: 0.5,
-    });
-    const matNodeGreen = new THREE.MeshPhysicalMaterial({
-      color: 0x55ffcc, emissive: 0x00ddaa, emissiveIntensity: 0.5,
-      metalness: 0.1, roughness: 0.0, transmission: 0.3, thickness: 0.5,
-    });
-    const matRungInner = new THREE.MeshPhysicalMaterial({
-      color: 0xffffff, emissive: 0xaaddff, emissiveIntensity: 0.2,
-      metalness: 0.0, roughness: 0.1, transparent: true, opacity: 0.25,
-    });
-
+    let colorIdx = 0;
     for (let i = 0; i < NUM_PTS; i += RUNG_STEP) {
       const p1 = s1[i];
       const p2 = s2[i];
-      const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
       const dir = new THREE.Vector3().subVectors(p2, p1);
       const len = dir.length();
+      const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
       const norm = dir.clone().normalize();
       const up = new THREE.Vector3(0, 1, 0);
 
-      // Blue node
-      const nb = new THREE.Mesh(nodeGeoB, matNodeBlue);
-      nb.position.copy(p1);
-      helixGroup.add(nb);
+      const [col1, col2] = BASE_COLORS[colorIdx % BASE_COLORS.length];
+      colorIdx++;
 
-      // Green node
-      const ng = new THREE.Mesh(nodeGeoG, matNodeGreen);
-      ng.position.copy(p2);
-      helixGroup.add(ng);
+      const n1 = new THREE.Mesh(nodeGeo, nodeMat);
+      n1.position.copy(p1);
+      helixGroup.add(n1);
 
-      // Rung rod — two halves colored
-      const halfLen = len / 2;
-      const q1 = new THREE.Vector3().lerpVectors(p1, mid, 0.5);
-      const q2 = new THREE.Vector3().lerpVectors(mid, p2, 0.5);
+      const n2 = new THREE.Mesh(nodeGeo, nodeMat);
+      n2.position.copy(p2);
+      helixGroup.add(n2);
 
-      const cylGeo = new THREE.CylinderGeometry(0.045, 0.045, halfLen, 8);
+      const inset = 0.24;
+      const rodLen = (len - inset * 2) / 2;
+      const q1 = p1.clone().addScaledVector(norm, inset + rodLen / 2);
+      const q2 = p2.clone().addScaledVector(norm, -(inset + rodLen / 2));
+      const rodGeo = new THREE.CylinderGeometry(0.072, 0.072, rodLen, 14);
 
-      const rBlue = new THREE.Mesh(cylGeo, new THREE.MeshPhysicalMaterial({
-        color: 0x00d4ff, emissive: 0x003366, emissiveIntensity: 0.3,
-        transparent: true, opacity: 0.55, roughness: 0.2,
+      const rod1 = new THREE.Mesh(rodGeo, new THREE.MeshStandardMaterial({
+        color: col1, metalness: 0.1, roughness: 0.3,
       }));
-      rBlue.position.copy(q1);
-      rBlue.quaternion.setFromUnitVectors(up, norm);
-      helixGroup.add(rBlue);
+      rod1.position.copy(q1);
+      rod1.quaternion.setFromUnitVectors(up, norm);
+      helixGroup.add(rod1);
 
-      const rGreen = new THREE.Mesh(cylGeo, new THREE.MeshPhysicalMaterial({
-        color: 0x00ffb3, emissive: 0x003322, emissiveIntensity: 0.3,
-        transparent: true, opacity: 0.55, roughness: 0.2,
+      const rod2 = new THREE.Mesh(rodGeo, new THREE.MeshStandardMaterial({
+        color: col2, metalness: 0.1, roughness: 0.3,
       }));
-      rGreen.position.copy(q2);
-      rGreen.quaternion.setFromUnitVectors(up, norm);
-      helixGroup.add(rGreen);
+      rod2.position.copy(q2);
+      rod2.quaternion.setFromUnitVectors(up, norm);
+      helixGroup.add(rod2);
 
-      // Center junction — glowing pearl
-      const jct = new THREE.Mesh(
-        new THREE.SphereGeometry(0.075, 10, 8),
-        new THREE.MeshPhysicalMaterial({
-          color: 0xffffff, emissive: 0xaaffee, emissiveIntensity: 0.9,
-          transparent: true, opacity: 0.7, roughness: 0.0,
-        })
+      const pearl = new THREE.Mesh(
+        new THREE.SphereGeometry(0.10, 12, 8),
+        new THREE.MeshStandardMaterial({ color: 0xf0f2f8, roughness: 0.15 })
       );
-      jct.position.copy(mid);
-      helixGroup.add(jct);
+      pearl.position.copy(mid);
+      helixGroup.add(pearl);
     }
-
-    // ── Floating particles ──
-    const PCNT = 260;
-    const mkParticles = (offsetAngle, color) => {
-      const pos = new Float32Array(PCNT * 3);
-      for (let i = 0; i < PCNT; i++) {
-        const t = Math.random();
-        const angle = t * Math.PI * 2 * TURNS + offsetAngle + (Math.random() - 0.5) * 1.8;
-        const y = (t - 0.5) * HEIGHT;
-        const r = RADIUS + (Math.random() - 0.5) * 3.5;
-        pos[i * 3] = Math.cos(angle) * r;
-        pos[i * 3 + 1] = y;
-        pos[i * 3 + 2] = Math.sin(angle) * r;
-      }
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-      return new THREE.Points(geo, new THREE.PointsMaterial({
-        color, size: 0.065, transparent: true, opacity: 0.55,
-        blending: THREE.AdditiveBlending, depthWrite: false,
-      }));
-    };
-
-    const pBlue = mkParticles(0, 0x00d4ff);
-    const pGreen = mkParticles(Math.PI, 0x00ffb3);
-    helixGroup.add(pBlue, pGreen);
 
     scene.add(helixGroup);
 
-    // ── Interaction State ──
+    // ── Interaction state ──
     const state = {
-      isDragging: false,
-      prevX: 0, prevY: 0,
-      velX: 0, velY: 0,
-      rotX: 0.08, rotY: 0,
-      zoom: 26,
-    };
-
-    const onPointerDown = (e) => {
-      state.isDragging = true;
-      state.prevX = e.clientX;
-      state.prevY = e.clientY;
-      state.velX = 0;
-      state.velY = 0;
-      canvas.style.cursor = 'grabbing';
-    };
-
-    const onPointerMove = (e) => {
-      if (!state.isDragging) return;
-      const dx = e.clientX - state.prevX;
-      const dy = e.clientY - state.prevY;
-      state.velX = dx * 0.012;
-      state.velY = dy * 0.010;
-      state.rotY += state.velX;
-      state.rotX += state.velY;
-      state.rotX = Math.max(-1.2, Math.min(1.2, state.rotX));
-      state.prevX = e.clientX;
-      state.prevY = e.clientY;
-    };
-
-    const onPointerUp = () => {
-      state.isDragging = false;
-      canvas.style.cursor = 'grab';
-    };
-
-    const onWheel = (e) => {
-      state.zoom += e.deltaY * 0.03;
-      state.zoom = Math.max(12, Math.min(40, state.zoom));
+      dragging: false,
+      prevX: 0,
+      velX: 0,
+      rotY: 0,
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // CHANGE 2 — also update targetZoom if model clips
+      //   42 frames a HEIGHT=56 model well.
+      //   If you increase HEIGHT further, raise this too.
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      targetZoom: 42,
     };
 
     canvas.style.cursor = 'grab';
-    canvas.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
+
+    const onDown = (e) => {
+      state.dragging = true;
+      state.prevX = e.clientX;
+      state.velX = 0;
+      canvas.style.cursor = 'grabbing';
+    };
+
+    const onMove = (e) => {
+      if (!state.dragging) return;
+      const dx = e.clientX - state.prevX;
+      state.velX = dx * 0.011;
+      state.rotY += state.velX;
+      state.prevX = e.clientX;
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+      // CHANGE 1 — HORIZONTAL-ONLY ROTATION
+      // dy is intentionally unused here.
+      // rotX is never modified — it stays at 0.
+      // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    };
+
+    const onUp = () => { state.dragging = false; canvas.style.cursor = 'grab'; };
+    const onWheel = (e) => {
+      state.targetZoom = Math.max(16, Math.min(55, state.targetZoom + e.deltaY * 0.04));
+    };
+
+    canvas.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
     canvas.addEventListener('wheel', onWheel, { passive: true });
 
-    // ── Touch support ──
-    let lastTouchX = 0, lastTouchY = 0;
-    const onTouchStart = (e) => {
-      lastTouchX = e.touches[0].clientX;
-      lastTouchY = e.touches[0].clientY;
-    };
-    const onTouchMove = (e) => {
-      const dx = e.touches[0].clientX - lastTouchX;
-      const dy = e.touches[0].clientY - lastTouchY;
-      state.rotY += dx * 0.012;
-      state.rotX += dy * 0.010;
-      state.rotX = Math.max(-1.2, Math.min(1.2, state.rotX));
-      lastTouchX = e.touches[0].clientX;
-      lastTouchY = e.touches[0].clientY;
-    };
-    canvas.addEventListener('touchstart', onTouchStart, { passive: true });
-    canvas.addEventListener('touchmove', onTouchMove, { passive: true });
+    // Touch — horizontal only
+    let lx = 0;
+    canvas.addEventListener('touchstart', (e) => { lx = e.touches[0].clientX; }, { passive: true });
+    canvas.addEventListener('touchmove', (e) => {
+      const dx = e.touches[0].clientX - lx;
+      state.rotY += dx * 0.011;
+      lx = e.touches[0].clientX;
+    }, { passive: true });
 
-    // ── Animation ──
+    // ── Animate ──
     let frameId;
     const clock = new THREE.Clock();
-    const autoRotSpeed = 0.004;
-
-    const animateParticles = (geo, dt) => {
-      const pos = geo.attributes.position.array;
-      for (let i = 0; i < PCNT; i++) {
-        pos[i * 3 + 1] += dt * 0.9;
-        if (pos[i * 3 + 1] > HEIGHT / 2) pos[i * 3 + 1] = -HEIGHT / 2;
-      }
-      geo.attributes.position.needsUpdate = true;
-    };
 
     const animate = () => {
       frameId = requestAnimationFrame(animate);
-      const dt = clock.getDelta();
       const elapsed = clock.getElapsedTime();
 
-      // Auto-rotate when not dragging, apply inertia when released
-      if (!state.isDragging) {
-        state.rotY += autoRotSpeed;
-        state.velX *= 0.92;
-        state.velY *= 0.92;
+      if (!state.dragging) {
+        state.rotY += 0.0035;
+        state.velX *= 0.90;
         state.rotY += state.velX;
-        state.rotX += state.velY;
       }
 
       helixGroup.rotation.y = state.rotY;
-      helixGroup.rotation.x = state.rotX;
+      helixGroup.rotation.x = 0;   // CHANGE 1 — always locked to 0
 
-      // Smooth zoom
-      camera.position.z += (state.zoom - camera.position.z) * 0.08;
+      camera.position.z += (state.targetZoom - camera.position.z) * 0.07;
 
-      // Subtle breathe
-      const breathe = 1 + Math.sin(elapsed * 0.7) * 0.012;
-      helixGroup.scale.setScalar(breathe);
-
-      // Orbit point lights for shimmer
-      pointA.position.x = Math.cos(elapsed * 0.4) * 10;
-      pointA.position.z = Math.sin(elapsed * 0.4) * 8;
-      pointB.position.x = Math.sin(elapsed * 0.3) * 9;
-      pointB.position.z = Math.cos(elapsed * 0.3) * 7;
-
-      animateParticles(pBlue.geometry, dt);
-      animateParticles(pGreen.geometry, dt);
+      rimL.position.x = Math.cos(elapsed * 0.25) * 10;
+      rimL.position.z = Math.sin(elapsed * 0.25) * 8;
+      rimR.position.x = Math.sin(elapsed * 0.2) * 10;
+      rimR.position.z = Math.cos(elapsed * 0.2) * 7;
 
       renderer.render(scene, camera);
     };
     animate();
 
-    // ── Resize ──
     const onResize = () => {
-      const w = container.clientWidth;
-      const h = container.clientHeight;
+      const w = container.clientWidth, h = container.clientHeight;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
@@ -828,12 +818,10 @@ function DNAHelix() {
     return () => {
       cancelAnimationFrame(frameId);
       window.removeEventListener('resize', onResize);
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
-      canvas.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      canvas.removeEventListener('pointerdown', onDown);
       canvas.removeEventListener('wheel', onWheel);
-      canvas.removeEventListener('touchstart', onTouchStart);
-      canvas.removeEventListener('touchmove', onTouchMove);
       renderer.dispose();
       scene.traverse((obj) => {
         if (obj.geometry) obj.geometry.dispose();
