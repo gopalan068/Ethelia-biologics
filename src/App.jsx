@@ -487,6 +487,7 @@ function Navigation() {
   return (
     <nav className={`nav ${visible ? 'visible' : ''} ${scrolled ? 'scrolled' : ''}`} id="nav">
       <div className="nav-logo">
+        <img src="/logo.png" alt="Ethelia Logo" className="nav-logo-img" />
         <span className="nav-logo-name">Ethelia</span>
         <span className="nav-logo-suffix">Biologics</span>
       </div>
@@ -512,227 +513,163 @@ function DNAHelix() {
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-    const COUNT = 12000;
+    const ctx = canvas.getContext('2d');
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let W, H;
 
-    // ── Scene ──
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(60, width / height, 0.1, 2000);
-    camera.position.set(0, 0, 80);
+    function resize() {
+      W = container.clientWidth;
+      H = container.clientHeight;
+      canvas.width = W * dpr;
+      canvas.height = H * dpr;
+      ctx.scale(dpr, dpr);
+    }
+    resize();
 
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
-    renderer.setClearColor(0x000000, 0);
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
+    const NODES_PER_STRAND = 22;
+    const TWIST = Math.PI * 2 * 2.2;
+    const RADIUS = 120;
+    const SEGMENTS = 120;
+    const STRAND_COLOR = 'rgba(71,145,150,0.4)';
 
-    // ── Particles ──
-    const geometry = new THREE.TetrahedronGeometry(0.22);
-    const material = new THREE.MeshBasicMaterial({ vertexColors: true });
-    const mesh = new THREE.InstancedMesh(geometry, material, COUNT);
-    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    scene.add(mesh);
+    let rotY = 0, autoSpin = true;
+    let drag = false, lastX = 0, velX = 0;
+    let t = 0;
 
-    const positions = Array.from({ length: COUNT }, () =>
-      new THREE.Vector3(
-        (Math.random() - 0.5) * 80,
-        (Math.random() - 0.5) * 80,
-        (Math.random() - 0.5) * 80
-      )
-    );
-
-    const dummy = new THREE.Object3D();
-    const pColor = new THREE.Color();
-    const target = new THREE.Vector3();
-
-    // Dark colors — readable on white
-    const PALETTE = {
-      strandA: new THREE.Color('#0044cc'),
-      strandB: new THREE.Color('#0099cc'),
-      bridgeActive: new THREE.Color('#111111'),
-      bridgeOff: new THREE.Color('#c8dde8'),
-    };
-
-    // ── Interaction State ──
-    const state = {
-      isDragging: false,
-      prevX: 0, prevY: 0,
-      velX: 0, velY: 0,
-      rotX: 0.08, rotY: 0,
-      zoom: 80,
-    };
-
-    const onPointerDown = (e) => {
-      state.isDragging = true;
-      state.prevX = e.clientX;
-      state.prevY = e.clientY;
-      state.velX = 0;
-      state.velY = 0;
-      canvas.style.cursor = 'grabbing';
-    };
-    const onPointerMove = (e) => {
-      if (!state.isDragging) return;
-      const dx = e.clientX - state.prevX;
-      const dy = e.clientY - state.prevY;
-      state.velX = dx * 0.012;
-      state.velY = dy * 0.010;
-      state.rotY += state.velX;
-      state.rotX += state.velY;
-      state.rotX = Math.max(-1.2, Math.min(1.2, state.rotX));
-      state.prevX = e.clientX;
-      state.prevY = e.clientY;
-    };
-    const onPointerUp = () => {
-      state.isDragging = false;
-      canvas.style.cursor = 'grab';
-    };
-    const onWheel = (e) => {
-      state.zoom += e.deltaY * 0.05;
-      state.zoom = Math.max(30, Math.min(150, state.zoom));
-    };
+    const onPointerDown = (e) => { drag = true; lastX = e.clientX; velX = 0; autoSpin = false; canvas.style.cursor = 'grabbing'; };
+    const onPointerUp = () => { drag = false; autoSpin = true; canvas.style.cursor = 'grab'; };
+    const onPointerMove = (e) => { if (!drag) return; const dx = e.clientX - lastX; lastX = e.clientX; velX = dx * 0.012; rotY += velX; };
+    const onTouchStart = (e) => { lastX = e.touches[0].clientX; velX = 0; autoSpin = false; };
+    const onTouchEnd = () => { autoSpin = true; };
+    const onTouchMove = (e) => { const dx = e.touches[0].clientX - lastX; lastX = e.touches[0].clientX; rotY += dx * 0.012; };
 
     canvas.style.cursor = 'grab';
     canvas.addEventListener('pointerdown', onPointerDown);
-    window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
-    canvas.addEventListener('wheel', onWheel, { passive: true });
-
-    // Touch
-    let lastTouchX = 0, lastTouchY = 0;
-    const onTouchStart = (e) => {
-      lastTouchX = e.touches[0].clientX;
-      lastTouchY = e.touches[0].clientY;
-    };
-    const onTouchMove = (e) => {
-      const dx = e.touches[0].clientX - lastTouchX;
-      const dy = e.touches[0].clientY - lastTouchY;
-      state.rotY += dx * 0.012;
-      state.rotX += dy * 0.010;
-      state.rotX = Math.max(-1.2, Math.min(1.2, state.rotX));
-      lastTouchX = e.touches[0].clientX;
-      lastTouchY = e.touches[0].clientY;
-    };
+    window.addEventListener('pointermove', onPointerMove);
     canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+    canvas.addEventListener('touchend', onTouchEnd, { passive: true });
     canvas.addEventListener('touchmove', onTouchMove, { passive: true });
 
-    // ── Animation ──
+    function project(x, y, z) {
+      const fov = 520, oz = 280;
+      const s = fov / (fov + z + oz);
+      return { x: W / 2 + x * s, y: H / 2 + y * s, s };
+    }
+
+    function getStrandXZ(norm, strand, time) {
+      const angle = norm * TWIST + time + (strand === 1 ? Math.PI : 0);
+      const rx = Math.cos(angle) * RADIUS;
+      const rz = Math.sin(angle) * RADIUS;
+      const cosY = Math.cos(rotY), sinY = Math.sin(rotY);
+      return { x: rx * cosY + rz * sinY, z: -rx * sinY + rz * cosY };
+    }
+
     let frameId;
-    const clock = new THREE.Clock();
+    function frame() {
+      frameId = requestAnimationFrame(frame);
+      t += 0.008;
+      if (autoSpin) { rotY += 0.018; velX *= 0.92; rotY += velX; }
+      else if (!drag) { velX *= 0.92; rotY += velX; }
 
-    const animate = () => {
-      frameId = requestAnimationFrame(animate);
-      const time = clock.getElapsedTime();
+      ctx.clearRect(0, 0, W, H);
 
-      // Auto-rotate + inertia
-      if (!state.isDragging) {
-        state.rotY += 0.004;
-        state.velX *= 0.92;
-        state.velY *= 0.92;
-        state.rotY += state.velX;
-        state.rotX += state.velY;
+      const yTop = -H * 0.80, yBot = H * 0.80;
+
+      // Draw backbone strands
+      for (let strand = 0; strand < 2; strand++) {
+        const pts = [];
+        for (let i = 0; i <= SEGMENTS; i++) {
+          const norm = i / SEGMENTS;
+          const wy = yTop + norm * (yBot - yTop);
+          const { x, z } = getStrandXZ(norm, strand, t);
+          const p = project(x, wy, z);
+          pts.push(p);
+        }
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.strokeStyle = STRAND_COLOR;
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
       }
 
-      // Smooth zoom
-      camera.position.z += (state.zoom - camera.position.z) * 0.08;
-      camera.lookAt(0, 0, 0);
+      // Collect all objects for depth sorting
+      const allObjects = [];
 
-      // DNA swarm logic
-      const twist = 1.5, radius = 16, flux = 1.4, zoom = 1.4;
-      const t = time * 0.4 * flux;
-      const breakY = Math.sin(t * 0.4) * 50;
+      for (let s = 0; s < 2; s++) {
+        for (let i = 0; i < NODES_PER_STRAND; i++) {
+          const norm = (i + 0.5) / NODES_PER_STRAND;
+          const wy = yTop + norm * (yBot - yTop);
+          const { x, z } = getStrandXZ(norm, s, t);
+          const p = project(x, wy, z);
+          const isGold = s === 0;
+          const baseR = isGold ? 11 : 8;
+          allObjects.push({ type: 'node', px: p.x, py: p.y, r: baseR * p.s * 1.2, isGold, depth: p.s, z });
+        }
+      }
 
-      // Apply rotation via a pivot group offset
-      const cosY = Math.cos(state.rotY), sinY = Math.sin(state.rotY);
-      const cosX = Math.cos(state.rotX), sinX = Math.sin(state.rotX);
+      for (let i = 0; i < NODES_PER_STRAND; i++) {
+        const norm = (i + 0.5) / NODES_PER_STRAND;
+        const wy = yTop + norm * (yBot - yTop);
+        const { x: x1, z: z1 } = getStrandXZ(norm, 0, t);
+        const { x: x2, z: z2 } = getStrandXZ(norm, 1, t);
+        const p1 = project(x1, wy, z1);
+        const p2 = project(x2, wy, z2);
+        allObjects.push({ type: 'rung', x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, z: (z1 + z2) / 2, depth: (p1.s + p2.s) / 2 });
+      }
 
-      for (let i = 0; i < COUNT; i++) {
-        const norm = i / COUNT;
-        let px = 0, py = 0, pz = 0;
-        const isBackbone = norm < 0.75;
+      allObjects.sort((a, b) => a.z - b.z);
 
-        if (isBackbone) {
-          const side = norm < 0.375 ? 1 : -1;
-          const n2 = norm < 0.375 ? norm / 0.375 : (norm - 0.375) / 0.375;
-          const v = (n2 - 0.5) * 80;
-          const angle = v * 0.1 * twist + t;
-          const offset = side === 1 ? 0 : Math.PI;
-          const dy = v - breakY;
-          const factor = Math.min(1.0, (dy * dy) / 200.0);
-          const currentR = radius * (0.95 + 0.05 * factor);
-          px = Math.cos(angle + offset) * currentR;
-          pz = Math.sin(angle + offset) * currentR;
-          py = v;
-          const jitter = (1.0 - factor) * 3.0;
-          px += Math.sin(i * 0.5 + t * 8) * jitter;
-          pz += Math.cos(i * 0.5 + t * 8) * jitter;
-          pColor.lerpColors(PALETTE.strandA, PALETTE.strandB, factor);
+      for (const obj of allObjects) {
+        if (obj.type === 'rung') {
+          const alpha = 0.12 + obj.depth * 0.3;
+          ctx.beginPath();
+          ctx.moveTo(obj.x1, obj.y1);
+          ctx.lineTo(obj.x2, obj.y2);
+          ctx.strokeStyle = `rgba(71,145,150,${alpha})`;
+          ctx.lineWidth = 0.9;
+          ctx.stroke();
+          const mx = (obj.x1 + obj.x2) / 2, my = (obj.y1 + obj.y2) / 2;
+          const len = Math.sqrt((obj.x2 - obj.x1) ** 2 + (obj.y2 - obj.y1) ** 2);
+          if (len > 3) {
+            ctx.beginPath();
+            ctx.arc(mx, my, Math.min(len * 0.18, 3) * obj.depth, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(50,130,135,${alpha * 0.9})`;
+            ctx.fill();
+          }
         } else {
-          const n2 = (norm - 0.75) / 0.25;
-          const v = (n2 - 0.5) * 80;
-          const angle = v * 0.1 * twist + t;
-          const lerpVal = Math.sin(i * 99.0) * 0.5 + 0.5;
-          const r = radius * (lerpVal * 2.0 - 1.0);
-          const dy = Math.abs(v - breakY);
-          px = Math.cos(angle) * r;
-          pz = Math.sin(angle) * r;
-          py = v;
-          if (dy < 12 && Math.sin(i * 1.5) > 0.4) {
-            px += Math.sin(i + t * 5) * 5;
-            pz += Math.cos(i + t * 5) * 5;
-            pColor.copy(PALETTE.bridgeActive);
+          const alpha = 0.4 + obj.depth * 0.6;
+          const r = obj.r;
+          if (obj.isGold) {
+            ctx.beginPath(); ctx.arc(obj.px, obj.py, r, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(185,150,30,${alpha * 0.85})`; ctx.fill();
+            ctx.beginPath(); ctx.arc(obj.px, obj.py, r * 0.55, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(210,180,70,${alpha * 0.7})`; ctx.fill();
           } else {
-            pColor.copy(PALETTE.bridgeOff);
+            ctx.beginPath(); ctx.arc(obj.px, obj.py, r, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(140,138,134,${alpha * 0.75})`; ctx.fill();
+            ctx.beginPath(); ctx.arc(obj.px, obj.py, r * 0.5, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(190,188,184,${alpha * 0.5})`; ctx.fill();
           }
         }
-
-        // Apply rotation manually so we can keep mesh world-space
-        const sx = px * zoom, sy = py * zoom, sz = pz * zoom;
-        // Y rotation
-        const rx1 = sx * cosY + sz * sinY;
-        const rz1 = -sx * sinY + sz * cosY;
-        // X rotation
-        const ry2 = sy * cosX - rz1 * sinX;
-        const rz2 = sy * sinX + rz1 * cosX;
-
-        target.set(rx1, ry2, rz2);
-        positions[i].lerp(target, 0.1);
-        dummy.position.copy(positions[i]);
-        dummy.updateMatrix();
-        mesh.setMatrixAt(i, dummy.matrix);
-        mesh.setColorAt(i, pColor);
       }
+    }
 
-      mesh.instanceMatrix.needsUpdate = true;
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-      renderer.render(scene, camera);
-    };
-    animate();
+    frame();
 
-    // ── Resize ──
-    const onResize = () => {
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, h);
-    };
+    const onResize = () => { resize(); };
     window.addEventListener('resize', onResize);
 
-    // ── Cleanup ──
     return () => {
       cancelAnimationFrame(frameId);
       window.removeEventListener('resize', onResize);
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
       canvas.removeEventListener('pointerdown', onPointerDown);
-      canvas.removeEventListener('wheel', onWheel);
       canvas.removeEventListener('touchstart', onTouchStart);
+      canvas.removeEventListener('touchend', onTouchEnd);
       canvas.removeEventListener('touchmove', onTouchMove);
-      renderer.dispose();
-      geometry.dispose();
-      material.dispose();
     };
   }, []);
 
@@ -742,7 +679,6 @@ function DNAHelix() {
     </div>
   );
 }
-
 // ═══════════════════════════════════════
 // HERO SECTION
 // ═══════════════════════════════════════
