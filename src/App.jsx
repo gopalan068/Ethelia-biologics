@@ -494,7 +494,6 @@ function Navigation() {
       <ul className="nav-links">
         <li><a className="nav-link" onClick={() => scrollTo('about')} href="#about">About</a></li>
         <li><a className="nav-link" onClick={() => scrollTo('science')} href="#science">Science</a></li>
-        <li><a className="nav-link" onClick={() => scrollTo('approach')} href="#approach">Approach</a></li>
         <li><a className="nav-link" onClick={() => scrollTo('contact')} href="#contact">Contact</a></li>
         <li><button className="nav-cta">Request Early Access</button></li>
       </ul>
@@ -1100,173 +1099,7 @@ function ScienceSection() {
   );
 }
 
-// ═══════════════════════════════════════
-// PATIENT COMPARISON (Value Prop)
-// ═══════════════════════════════════════
-function PatientComparison() {
-  const [precision, setPrecision] = useState(false);
-  const [ref, inView] = useInView({ threshold: 0.2 });
 
-  const data = {
-    traditional: {
-      a: { efficacy: 72, toxicity: 45, response: 58 },
-      b: { efficacy: 71, toxicity: 42, response: 55 },
-    },
-    precision: {
-      a: { efficacy: 94, toxicity: 12, response: 91 },
-      b: { efficacy: 38, toxicity: 65, response: 22 },
-    },
-  };
-
-  const current = precision ? data.precision : data.traditional;
-
-  return (
-    <div ref={ref}>
-      <div className="patient-comparison">
-        <div className="patient-card patient-a">
-          <div className="patient-card-header">
-            <div className="patient-avatar">A</div>
-            <div>
-              <div className="patient-name">Patient A</div>
-              <div className="patient-diagnosis">HER2+ Breast Cancer · Stage II</div>
-            </div>
-          </div>
-          <div className="patient-bar-group">
-            <div className="patient-bar-label">
-              <span>Drug Efficacy</span>
-              <span className="counter-value">{inView ? current.a.efficacy : 0}%</span>
-            </div>
-            <div className="patient-bar-track">
-              <div
-                className="patient-bar-fill efficacy"
-                style={{ width: inView ? `${current.a.efficacy}%` : '0%' }}
-              />
-            </div>
-          </div>
-          <div className="patient-bar-group">
-            <div className="patient-bar-label">
-              <span>Toxicity Risk</span>
-              <span className="counter-value">{inView ? current.a.toxicity : 0}%</span>
-            </div>
-            <div className="patient-bar-track">
-              <div
-                className="patient-bar-fill toxicity"
-                style={{ width: inView ? `${current.a.toxicity}%` : '0%' }}
-              />
-            </div>
-          </div>
-          <div className="patient-bar-group">
-            <div className="patient-bar-label">
-              <span>Treatment Response</span>
-              <span className="counter-value">{inView ? current.a.response : 0}%</span>
-            </div>
-            <div className="patient-bar-track">
-              <div
-                className="patient-bar-fill response"
-                style={{ width: inView ? `${current.a.response}%` : '0%' }}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="patient-card patient-b">
-          <div className="patient-card-header">
-            <div className="patient-avatar">B</div>
-            <div>
-              <div className="patient-name">Patient B</div>
-              <div className="patient-diagnosis">HER2+ Breast Cancer · Stage II</div>
-            </div>
-          </div>
-          <div className="patient-bar-group">
-            <div className="patient-bar-label">
-              <span>Drug Efficacy</span>
-              <span className="counter-value">{inView ? current.b.efficacy : 0}%</span>
-            </div>
-            <div className="patient-bar-track">
-              <div
-                className="patient-bar-fill efficacy"
-                style={{ width: inView ? `${current.b.efficacy}%` : '0%' }}
-              />
-            </div>
-          </div>
-          <div className="patient-bar-group">
-            <div className="patient-bar-label">
-              <span>Toxicity Risk</span>
-              <span className="counter-value">{inView ? current.b.toxicity : 0}%</span>
-            </div>
-            <div className="patient-bar-track">
-              <div
-                className="patient-bar-fill toxicity"
-                style={{ width: inView ? `${current.b.toxicity}%` : '0%' }}
-              />
-            </div>
-          </div>
-          <div className="patient-bar-group">
-            <div className="patient-bar-label">
-              <span>Treatment Response</span>
-              <span className="counter-value">{inView ? current.b.response : 0}%</span>
-            </div>
-            <div className="patient-bar-track">
-              <div
-                className="patient-bar-fill response"
-                style={{ width: inView ? `${current.b.response}%` : '0%' }}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="toggle-container">
-        <span className={`toggle-label ${!precision ? 'active' : ''}`}>Traditional Medicine</span>
-        <div
-          className={`toggle-switch ${precision ? 'active' : ''}`}
-          onClick={() => setPrecision(!precision)}
-          role="button"
-          tabIndex={0}
-          aria-label="Toggle between Traditional and Precision Medicine"
-        >
-          <div className="toggle-knob" />
-        </div>
-        <span className={`toggle-label ${precision ? 'active' : ''}`}>Precision Medicine</span>
-      </div>
-
-      {precision && (
-        <p style={{
-          textAlign: 'center',
-          fontFamily: 'var(--font-mono)',
-          fontSize: '0.72rem',
-          color: 'var(--text-muted)',
-          marginTop: '20px',
-          maxWidth: '500px',
-          marginLeft: 'auto',
-          marginRight: 'auto',
-          lineHeight: '1.7',
-        }}>
-          Same diagnosis, same drug — but Patient B carries a CYP2D6 poor-metabolizer variant.
-          Precision medicine reveals the divergence before treatment begins.
-        </p>
-      )}
-    </div>
-  );
-}
-
-function ValuePropSection() {
-  const [ref, inView] = useInView({ threshold: 0.15 });
-
-  return (
-    <section className="valueprop section" id="approach" ref={ref}>
-      <div className="section-inner">
-        <div className="valueprop-header">
-          <p className={`section-label reveal ${inView ? 'visible' : ''}`}>Why It Matters</p>
-          <h2 className={`section-title reveal ${inView ? 'visible' : ''}`} style={{ transitionDelay: '0.1s' }}>
-            Same Diagnosis. Different <em>Biology</em>. Different <em>Outcome</em>.
-          </h2>
-        </div>
-        <PatientComparison />
-      </div>
-    </section>
-  );
-}
 
 // ═══════════════════════════════════════
 // CHROMOSOME IDEOGRAM
@@ -1398,7 +1231,7 @@ function SpecialtiesSection() {
     <section className="specialties section" id="specialties" ref={ref}>
       <div className="section-inner">
         <div className="specialties-header">
-          <p className={`section-label reveal ${inView ? 'visible' : ''}`}>What We Do</p>
+          <p className={`section-label reveal ${inView ? 'visible' : ''}`} style={{ color: '#1b253cff' }}>What We Do</p>
           <h2 className={`section-title reveal ${inView ? 'visible' : ''}`} style={{ transitionDelay: '0.1s' }}>
             Beyond populations. Beyond averages. Into the <em>biology of one</em>.
           </h2>
@@ -1465,8 +1298,8 @@ function Footer() {
       <button className="footer-btn">Request Early Access</button>
 
       <div className="footer-links">
-        <a href="https://linkedin.com" className="footer-link" target="_blank" rel="noopener noreferrer">LinkedIn</a>
-        <a href="mailto:contact@etheliabiologics.com" className="footer-link">contact@etheliabiologics.com</a>
+        <a href="https://www.linkedin.com/company/ethelia-biologics/" className="footer-link" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+        <a href="mailto:[etheliabiologics04@gmail.com]" className="footer-link">Contact us</a>
       </div>
 
       <p className="footer-location">Erode, Tamil Nadu, India · Est. 2026</p>
@@ -1481,14 +1314,12 @@ export default function App() {
   return (
     <>
       <EKGLoader />
-      <CustomCursor />
       <FloatingMolecules />
       <Navigation />
       <main>
         <HeroSection />
         <AboutSection />
         <ScienceSection />
-        <ValuePropSection />
         <PharmacogenomicsSection />
         <SpecialtiesSection />
         <Footer />

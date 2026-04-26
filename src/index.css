@@ -48,7 +48,7 @@ body {
   background: var(--bg);
   color: var(--text);
   overflow-x: hidden;
-  cursor: none;
+
   line-height: 1.7;
   min-height: 100vh;
 }
@@ -334,7 +334,7 @@ a {
   position: relative;
   padding: 4px 0;
   transition: color 0.3s ease;
-  cursor: none;
+
 }
 
 .nav-link::after {
@@ -370,7 +370,7 @@ a {
   position: relative;
   overflow: hidden;
   transition: color 0.4s ease, border-color 0.4s ease;
-  cursor: none;
+
   z-index: 1;
 }
 
@@ -519,7 +519,7 @@ a {
   border-radius: 2px;
   position: relative;
   overflow: hidden;
-  cursor: none;
+
   transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
@@ -535,7 +535,7 @@ a {
   display: flex;
   align-items: center;
   gap: 6px;
-  cursor: none;
+
   transition: color 0.3s ease;
 }
 
@@ -652,7 +652,7 @@ a {
   padding: 0 1px;
   transition: color 0.3s ease, transform 0.3s ease;
   position: relative;
-  cursor: none;
+
 }
 
 .genome-ticker .base.highlighted {
@@ -860,7 +860,7 @@ a {
   min-width: 160px;
   text-align: center;
   transition: transform 0.4s var(--ease-spring), box-shadow 0.4s ease, border-color 0.3s ease;
-  cursor: none;
+
   z-index: 2;
   opacity: 0;
   transform: translateY(20px);
@@ -1113,7 +1113,7 @@ a {
   background: rgba(var(--primary-rgb), 0.2);
   border-radius: 14px;
   border: 1.5px solid var(--glass-border);
-  cursor: none;
+
   transition: background 0.4s ease, border-color 0.4s ease;
 }
 
@@ -1273,7 +1273,7 @@ a {
    SPECIALTIES SECTION
    =========================== */
 .specialties {
-  background: var(--bg-light);
+  background: #cecccc;
   position: relative;
 }
 
@@ -1297,7 +1297,7 @@ a {
   border-radius: 16px;
   padding: 36px 32px;
   transition: transform 0.4s var(--ease-spring), box-shadow 0.4s ease, border-color 0.4s ease;
-  cursor: none;
+
   position: relative;
   overflow: hidden;
 }
@@ -1415,7 +1415,7 @@ a {
   background: transparent;
   position: relative;
   overflow: hidden;
-  cursor: none;
+
   z-index: 1;
   margin-bottom: 60px;
   transition: color 0.4s ease;
@@ -1452,7 +1452,7 @@ a {
   font-size: 0.74rem;
   color: var(--text-muted);
   transition: color 0.3s ease;
-  cursor: none;
+
 }
 
 .footer-link:hover {
