@@ -345,14 +345,19 @@ function CustomCursor() {
   const trailPositions = useRef([]);
   const [hovering, setHovering] = useState(false);
   const [ready, setReady] = useState(false);
+  const [isTouch, setIsTouch] = useState(false);
 
   useEffect(() => {
+    const checkTouch = () => {
+      setIsTouch('ontouchstart' in window || navigator.maxTouchPoints > 0);
+    };
+    checkTouch();
     const timer = setTimeout(() => setReady(true), 2000);
     return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || isTouch) return;
 
     const NUM_TRAILS = 6;
     trailPositions.current = Array(NUM_TRAILS).fill({ x: 0, y: 0 });
@@ -368,7 +373,7 @@ function CustomCursor() {
     const onHoverIn = () => setHovering(true);
     const onHoverOut = () => setHovering(false);
 
-    const interactiveEls = document.querySelectorAll('a, button, .nav-link, .nav-cta, .toggle-switch, .specialty-card, .pathway-node, .patient-card, .drug-card, .btn-primary, .btn-text, .footer-btn');
+    const interactiveEls = document.querySelectorAll('a, button, .nav-link, .nav-cta, .toggle-switch, .specialty-card, .pathway-node, .drug-card, .btn-primary, .btn-text, .footer-btn');
     interactiveEls.forEach((el) => {
       el.addEventListener('mouseenter', onHoverIn);
       el.addEventListener('mouseleave', onHoverOut);
@@ -416,7 +421,7 @@ function CustomCursor() {
     };
   }, [ready]);
 
-  if (!ready) return null;
+  if (!ready || isTouch) return null;
 
   return (
     <>
@@ -468,6 +473,7 @@ function FloatingMolecules() {
 function Navigation() {
   const [scrolled, setScrolled] = useState(false);
   const [visible, setVisible] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => setVisible(true), 300);
@@ -479,27 +485,46 @@ function Navigation() {
     };
   }, []);
 
+  useEffect(() => {
+    if (menuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+  }, [menuOpen]);
+
   const scrollTo = (id) => {
     const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+      setMenuOpen(false);
+    }
   };
 
   return (
-    <nav className={`nav ${visible ? 'visible' : ''} ${scrolled ? 'scrolled' : ''}`} id="nav">
+    <nav className={`nav ${visible ? 'visible' : ''} ${scrolled ? 'scrolled' : ''} ${menuOpen ? 'menu-open' : ''}`} id="nav">
       <div className="nav-logo">
         <img src="/logo.png" alt="Ethelia Logo" className="nav-logo-img" />
         <span className="nav-logo-name">Ethelia</span>
         <span className="nav-logo-suffix">Biologics</span>
       </div>
-      <ul className="nav-links">
+
+      <button className={`menu-toggle ${menuOpen ? 'active' : ''}`} onClick={() => setMenuOpen(!menuOpen)} aria-label="Toggle Menu">
+        <span className="menu-bar"></span>
+        <span className="menu-bar"></span>
+        <span className="menu-bar"></span>
+      </button>
+
+      <ul className={`nav-links ${menuOpen ? 'active' : ''}`}>
         <li><a className="nav-link" onClick={() => scrollTo('about')} href="#about">About</a></li>
         <li><a className="nav-link" onClick={() => scrollTo('science')} href="#science">Science</a></li>
         <li><a className="nav-link" onClick={() => scrollTo('contact')} href="#contact">Contact</a></li>
-        <li><button className="nav-cta">Request Early Access</button></li>
+        <li><button className="nav-cta" onClick={() => scrollTo('contact')}>Request Early Access</button></li>
       </ul>
     </nav>
   );
 }
+
 //----------------------------------------------
 //DNA HELIX STRUCTURE
 //----------------------------------------------
